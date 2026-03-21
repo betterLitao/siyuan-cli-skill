@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Compile Python scripts
+        run: python -m compileall scripts
+
+      - name: Scan for sensitive strings
+        shell: bash
+        run: |
+          set -euo pipefail
+          pattern='cfut_[A-Za-z0-9]+|dk_[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9_]+|xoxb-|AIza[0-9A-Za-z_-]+|-----BEGIN( RSA| OPENSSH| EC| DSA| PGP)? PRIVATE KEY-----|sharebot|qzz\.io|714755132@qq\.com|服务器运维'
+          if grep -RInE "$pattern" . \
+            --exclude-dir=.git \
+            --exclude-dir=.github \
+            --exclude=demo-config.svg; then
+            echo 'Sensitive pattern detected.'
+            exit 1
+          fi
+          echo 'Sensitive scan passed.'

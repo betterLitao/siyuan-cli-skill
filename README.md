@@ -1,5 +1,6 @@
 # siyuan-cli-skill
 
+[![CI](https://github.com/betterLitao/siyuan-cli-skill/actions/workflows/ci.yml/badge.svg)](https://github.com/betterLitao/siyuan-cli-skill/actions/workflows/ci.yml)
 [简体中文](README.zh-CN.md)
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
