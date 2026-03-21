@@ -1,8 +1,16 @@
 # siyuan-cli-skill
 
+![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
+![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg)
+![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-6f42c1.svg)
+
 A reusable multi-file skill for **stable Siyuan document reads and writes**.
 
 It wraps Siyuan Kernel APIs behind a Python CLI so assistants can avoid hand-writing request payloads for common document operations.
+
+## Demo
+
+![Siyuan CLI config demo](assets/demo-config.svg)
 
 ## Features
 
@@ -12,12 +20,17 @@ It wraps Siyuan Kernel APIs behind a Python CLI so assistants can avoid hand-wri
 - explicit `create-doc --if-exists` conflict strategy
 - read-back verification after writes
 - UTF-8 file input support for long Markdown
+- no third-party Python dependencies
 - Windows and macOS / Linux friendly invocation
 
 ## Project structure
 
 ```text
 siyuan-cli-skill/
+├─ assets/
+│  └─ demo-config.svg
+├─ CHANGELOG.md
+├─ LICENSE
 ├─ SKILL.md
 ├─ README.md
 ├─ references/
@@ -46,18 +59,70 @@ This wrapper centralizes:
 - read-back verification
 - stable JSON contracts for automation
 
-## Commands
+## Installation
+
+### Option A: use it as a standalone CLI
+
+Requirements:
+
+- Python 3.9+
+- a reachable Siyuan instance
+- a valid Siyuan API token
+
+Clone the repository:
 
 ```bash
-config
-read
-search
-update
-append
-replace-section
-upsert-section
-create-doc
-delete-doc
+git clone https://github.com/betterLitao/siyuan-cli-skill.git
+cd siyuan-cli-skill
+```
+
+No `pip install` is required. The CLI uses only the Python standard library.
+
+Set the required environment variables.
+
+#### macOS / Linux
+
+```bash
+export SIYUAN_BASE_URL="http://your-siyuan-host:6806"
+export SIYUAN_TOKEN="your-siyuan-token"
+```
+
+#### PowerShell
+
+```powershell
+$env:SIYUAN_BASE_URL = "http://your-siyuan-host:6806"
+$env:SIYUAN_TOKEN = "your-siyuan-token"
+```
+
+Run a smoke test:
+
+```bash
+python3 scripts/siyuan_cli.py config
+```
+
+On Windows use:
+
+```bash
+python scripts/siyuan_cli.py config
+```
+
+### Option B: use it as a multi-file skill
+
+Do **not** copy `SKILL.md` alone. Copy the whole directory.
+
+Typical target layout:
+
+```text
+<your-skills-root>/siyuan/
+├─ SKILL.md
+├─ references/
+└─ scripts/
+```
+
+Then invoke from the copied skill directory:
+
+```bash
+python scripts/siyuan_cli.py config
 ```
 
 ## Quick start
@@ -147,6 +212,12 @@ Important:
 - request auth is driven by `SIYUAN_TOKEN`
 - `accessAuthCode` is mainly related to Siyuan service exposure / startup config
 - it is **not** the header this CLI uses for normal API requests
+
+## Release notes
+
+See [`CHANGELOG.md`](CHANGELOG.md).
+
+Current public baseline: **v1.0.0**.
 
 ## Write strategy
 
