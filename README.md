@@ -1,5 +1,7 @@
 # siyuan-cli-skill
 
+[简体中文](README.zh-CN.md)
+
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 ![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-6f42c1.svg)
