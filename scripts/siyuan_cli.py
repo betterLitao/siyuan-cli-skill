@@ -50,9 +50,9 @@ def build_parser() -> argparse.ArgumentParser:
     add_doc_selector_args(read_parser, require_target=True)
     read_parser.set_defaults(handler=handle_read)
 
-    search_parser = subparsers.add_parser("search", help="Search documents in allowed notebooks")
+    search_parser = subparsers.add_parser("search", help="Search documents in the configured scope")
     search_parser.add_argument("--query", required=True, help="Search keyword")
-    search_parser.add_argument("--notebook", default="", help="Restrict search to one allowed notebook")
+    search_parser.add_argument("--notebook", default="", help="Restrict search to one notebook")
     search_parser.add_argument("--limit", type=int, default=10, help="Max results, default 10")
     search_parser.set_defaults(handler=handle_search)
 
@@ -79,11 +79,25 @@ def build_parser() -> argparse.ArgumentParser:
     upsert_section_parser.set_defaults(handler=handle_upsert_section)
 
     create_parser = subparsers.add_parser("create-doc", help="Create a new document")
-    create_parser.add_argument("--notebook", default="", help="Target notebook name. Defaults to learn or 服务器运维 depending on intent")
-    create_parser.add_argument("--path", required=True, help="Target doc path, e.g. /工具 / 工作流/思源包装器")
+    create_parser.add_argument(
+        "--notebook",
+        default="",
+        help="Target notebook name. If omitted, the CLI uses the default notebook resolved from --purpose and environment config.",
+    )
+    create_parser.add_argument("--path", required=True, help="Target doc path, e.g. Guides/Wrapper")
     add_markdown_args(create_parser)
-    create_parser.add_argument("--if-exists", choices=["error", "skip", "replace"], default="error", help="Conflict strategy when the target path already exists")
-    create_parser.add_argument("--purpose", choices=["default", "learn"], default="default", help="Choose default notebook purpose")
+    create_parser.add_argument(
+        "--if-exists",
+        choices=["error", "skip", "replace"],
+        default="error",
+        help="Conflict strategy when the target path already exists",
+    )
+    create_parser.add_argument(
+        "--purpose",
+        choices=["default", "learn"],
+        default="default",
+        help="Choose which default notebook slot to use when --notebook is omitted",
+    )
     create_parser.set_defaults(handler=handle_create_doc)
 
     delete_parser = subparsers.add_parser("delete-doc", help="Delete a document by doc-id or path")
@@ -98,7 +112,12 @@ def add_doc_selector_args(parser: argparse.ArgumentParser, *, require_target: bo
     parser.add_argument("--doc-id", default="", help="Document ID")
     parser.add_argument("--path", default="", help="Document path inside notebook")
     parser.add_argument("--notebook", default="", help="Notebook name when using --path")
-    parser.add_argument("--require-allowed-notebook", action="store_true", default=False, help="Fail if --notebook is outside default scope")
+    parser.add_argument(
+        "--require-allowed-notebook",
+        action="store_true",
+        default=False,
+        help="Fail if --notebook is outside the configured allowed scope",
+    )
     parser.set_defaults(require_target=require_target)
 
 
@@ -108,7 +127,7 @@ def add_markdown_args(parser: argparse.ArgumentParser) -> None:
 
 
 def add_section_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--heading", required=True, help="Heading text or full Markdown heading, e.g. '注意事项' or '## 注意事项'")
+    parser.add_argument("--heading", required=True, help="Heading text or full Markdown heading, e.g. 'Notes' or '## Notes'")
     parser.add_argument("--level", type=int, default=None, help="Heading level when --heading is plain text. Defaults to 2")
 
 
@@ -318,7 +337,12 @@ def failure(action: str, exc: SiyuanError) -> Dict[str, Any]:
         "action": action,
         "message": str(exc),
         "data": None,
-        "error": exc.to_dict(),
+        "error": {
+            "type": exc.__class__.__name__,
+            "action": exc.action or action,
+            "message": str(exc),
+            "details": exc.details,
+        },
     }
 
 
@@ -328,29 +352,20 @@ def main() -> int:
     args = parser.parse_args()
     action = args.command
     try:
-        result = args.handler(args)
+        payload = args.handler(args)
+        print_json(payload)
+        return 0
     except SiyuanError as exc:
-        result = failure(action, exc)
-        print_json(result)
+        print_json(failure(action, exc))
         return 1
-    except Exception as exc:  # pragma: no cover - defensive top-level guard
-        result = {
-            "ok": False,
-            "action": action,
-            "message": str(exc),
-            "data": None,
-            "error": {
-                "type": exc.__class__.__name__,
-                "action": action,
-                "message": str(exc),
-                "details": None,
-            },
-        }
-        print_json(result)
+    except ValueError as exc:
+        err = SiyuanError(str(exc), action=action)
+        print_json(failure(action, err))
         return 1
-
-    print_json(result)
-    return 0
+    except Exception as exc:  # pragma: no cover - unexpected failure path
+        err = SiyuanError("Unexpected error.", action=action, details=str(exc))
+        print_json(failure(action, err))
+        return 1
 
 
 if __name__ == "__main__":

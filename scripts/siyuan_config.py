@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from typing import Dict, List
 
 DEFAULT_SERVER_BASE_URL = "http://127.0.0.1:3000"
-DEFAULT_ALLOWED_NOTEBOOK_NAMES = ("服务器运维", "learn")
-DEFAULT_LEARN_NOTEBOOK_NAMES = ("learn",)
+DEFAULT_ALLOWED_NOTEBOOK_NAMES: tuple[str, ...] = ()
+DEFAULT_LEARN_NOTEBOOK_NAMES: tuple[str, ...] = ()
 DEFAULT_TIMEOUT = 30
 
 
@@ -35,9 +35,7 @@ def _require_env_value(source: Dict[str, str], *, keys: List[str], label: str) -
     value = _first_non_empty(source, *keys)
     if value:
         return value
-    raise ValueError(
-        f"Missing Siyuan {label}. Set one of: {', '.join(keys)}"
-    )
+    raise ValueError(f"Missing Siyuan {label}. Set one of: {', '.join(keys)}")
 
 
 def load_config(env: Dict[str, str] | None = None) -> SiyuanConfig:
@@ -61,10 +59,10 @@ def load_config(env: Dict[str, str] | None = None) -> SiyuanConfig:
     except ValueError:
         timeout = DEFAULT_TIMEOUT
 
-    allowed_raw = source.get("SIYUAN_ALLOWED_NOTEBOOKS", ",".join(DEFAULT_ALLOWED_NOTEBOOK_NAMES))
+    allowed_raw = source.get("SIYUAN_ALLOWED_NOTEBOOKS", "")
     allowed_notebook_names = _split_csv(allowed_raw) or list(DEFAULT_ALLOWED_NOTEBOOK_NAMES)
 
-    learn_raw = source.get("SIYUAN_LEARN_NOTEBOOKS", ",".join(DEFAULT_LEARN_NOTEBOOK_NAMES))
+    learn_raw = source.get("SIYUAN_LEARN_NOTEBOOKS", "")
     learn_notebook_names = _split_csv(learn_raw) or list(DEFAULT_LEARN_NOTEBOOK_NAMES)
 
     return SiyuanConfig(
@@ -82,10 +80,16 @@ def config_summary(config: SiyuanConfig) -> Dict[str, object]:
         "timeout": config.timeout,
         "allowed_notebooks": config.allowed_notebook_names,
         "learn_notebooks": config.learn_notebook_names,
+        "scope_mode": "restricted" if config.allowed_notebook_names else "unrestricted",
         "has_token": bool(config.token),
         "server_base_url_hint": DEFAULT_SERVER_BASE_URL,
         "required_env": {
             "base_url": ["SIYUAN_BASE_URL", "SIYUAN_URL", "SIYUAN_REMOTE_URL"],
             "token": ["SIYUAN_TOKEN"],
+        },
+        "optional_env": {
+            "timeout": ["SIYUAN_TIMEOUT"],
+            "allowed_notebooks": ["SIYUAN_ALLOWED_NOTEBOOKS"],
+            "learn_notebooks": ["SIYUAN_LEARN_NOTEBOOKS"],
         },
     }

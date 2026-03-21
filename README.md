@@ -1,17 +1,23 @@
-# siyuan
+# siyuan-cli-skill
 
-这是一个 **多文件 skill**，源头位于 `E:/cc-switch/skills/siyuan`。
+A reusable multi-file skill for **stable Siyuan document reads and writes**.
 
-## 重要说明
+It wraps Siyuan Kernel APIs behind a Python CLI so assistants can avoid hand-writing request payloads for common document operations.
 
-- 这个 skill 已不再是只靠 `SKILL.md` 的单文件 skill。
-- 需要和 `scripts/`、`references/` 一起按**整个目录**同步。
-- 如果只复制 `SKILL.md`，CLI 包装器会缺失，长文本写入仍会回到不稳定路径。
+## Features
 
-## 目录结构
+- structured JSON output for every command
+- read, search, update, append, create, delete document operations
+- block-first `replace-section` / `upsert-section`
+- explicit `create-doc --if-exists` conflict strategy
+- read-back verification after writes
+- UTF-8 file input support for long Markdown
+- Windows and macOS / Linux friendly invocation
+
+## Project structure
 
 ```text
-siyuan/
+siyuan-cli-skill/
 ├─ SKILL.md
 ├─ README.md
 ├─ references/
@@ -23,135 +29,140 @@ siyuan/
    └─ siyuan_ops.py
 ```
 
-## 设计目标
+## Why this exists
 
-把思源 Kernel API 的 JSON 拼装、UTF-8 编码、控制字符清洗、写后回读校验，统一沉到 Python CLI 包装器里。
+Directly calling Siyuan Kernel APIs from prompts is brittle:
 
-这样模型只需要：
+- request bodies are easy to get wrong
+- long Markdown is noisy to inline
+- write verification is often skipped
+- platform-specific encoding problems show up fast
 
-1. 生成 Markdown 内容
-2. 选择 `read/search/update/append/replace-section/upsert-section/create-doc/delete-doc` 命令
-3. 对长文本优先用 `--input-file`
+This wrapper centralizes:
 
-## CLI 入口
+- environment-based auth
+- content normalization
+- block / document write flows
+- read-back verification
+- stable JSON contracts for automation
+
+## Commands
+
+```bash
+config
+read
+search
+update
+append
+replace-section
+upsert-section
+create-doc
+delete-doc
+```
+
+## Quick start
 
 ### Windows
 
 ```bash
 python scripts/siyuan_cli.py config
-python scripts/siyuan_cli.py search --query "OpenClaw"
+python scripts/siyuan_cli.py search --query "API gateway"
 python scripts/siyuan_cli.py read --doc-id "20260314140600-8gkfmc2"
 python scripts/siyuan_cli.py update --doc-id "20260314140600-8gkfmc2" --input-file "content.md"
-python scripts/siyuan_cli.py append --doc-id "20260314140600-8gkfmc2" --input-file "append.md"
-python scripts/siyuan_cli.py replace-section --doc-id "20260314140600-8gkfmc2" --heading "结论" --input-file "section.md"
-python scripts/siyuan_cli.py upsert-section --doc-id "20260314140600-8gkfmc2" --heading "注意事项 / 坑点" --input-file "section.md"
-python scripts/siyuan_cli.py create-doc --purpose learn --path "工具 / 工作流/思源稳定写入包装器" --input-file "content.md"
-python scripts/siyuan_cli.py delete-doc --path "工具 / 工作流/临时测试文档" --notebook "learn" --yes
+python scripts/siyuan_cli.py replace-section --doc-id "20260314140600-8gkfmc2" --heading "Summary" --input-file "section.md"
+python scripts/siyuan_cli.py create-doc --notebook "Projects" --path "Guides/API Wrapper" --input-file "content.md"
+python scripts/siyuan_cli.py delete-doc --path "Scratch/Test Doc" --notebook "Inbox" --yes
 ```
 
-在 Windows Git Bash 里，思源文档路径不要以 `/` 开头，避免被自动改写成 Windows 磁盘路径。
-
-路径里的分隔符两侧空格会自动清理，所以 `工具 / 工作流/文档` 这种写法会自动规范成 `/工具/工作流/文档`。
-
-### macOS
+### macOS / Linux
 
 ```bash
 python3 scripts/siyuan_cli.py config
-python3 scripts/siyuan_cli.py search --query "OpenClaw"
+python3 scripts/siyuan_cli.py search --query "API gateway"
 python3 scripts/siyuan_cli.py read --doc-id "20260314140600-8gkfmc2"
 python3 scripts/siyuan_cli.py update --doc-id "20260314140600-8gkfmc2" --input-file "content.md"
-python3 scripts/siyuan_cli.py append --doc-id "20260314140600-8gkfmc2" --input-file "append.md"
-python3 scripts/siyuan_cli.py replace-section --doc-id "20260314140600-8gkfmc2" --heading "结论" --input-file "section.md"
-python3 scripts/siyuan_cli.py upsert-section --doc-id "20260314140600-8gkfmc2" --heading "注意事项 / 坑点" --input-file "section.md"
-python3 scripts/siyuan_cli.py create-doc --purpose learn --path "/工具 / 工作流/思源稳定写入包装器" --input-file "content.md"
-python3 scripts/siyuan_cli.py delete-doc --path "工具 / 工作流/临时测试文档" --notebook "learn" --yes
+python3 scripts/siyuan_cli.py replace-section --doc-id "20260314140600-8gkfmc2" --heading "Summary" --input-file "section.md"
+python3 scripts/siyuan_cli.py create-doc --notebook "Projects" --path "Guides/API Wrapper" --input-file "content.md"
+python3 scripts/siyuan_cli.py delete-doc --path "Scratch/Test Doc" --notebook "Inbox" --yes
 ```
 
-`read` 现在会同时返回：
+## Path handling notes
 
-- `content` / `raw_content`：思源导出的原始 Markdown
-- `editable_content`：剥掉 frontmatter 和顶层标题后的正文，更适合继续修改
+- When using Windows Git Bash, do **not** start Siyuan paths with `/`.
+- Prefer `Guides/API Wrapper` over `/Guides/API Wrapper`.
+- Path normalization will:
+  - convert `\` to `/`
+  - remove `.sy`
+  - trim whitespace around separators
+  - normalize to Siyuan-style hpaths internally
 
-## 搜索与写入增强
+## Environment variables
 
-- 文档 `ID / hpath` 解析优先走官方 `filetree` API，不再默认依赖 SQL 查文档元信息
-- `search` 现在会命中文档标题、路径和正文块内容，不再只是偏标题搜索
-- `search` 的正文检索仍依赖 `query/sql`；如果思源处于发布模式且权限未开放，这个能力可能不可用
-- `replace-section` / `upsert-section` 现在优先走块级编辑：保留标题块，只替换该 section 子块
-- `upsert-section` 在标题不存在时，会在文档尾部按块创建新 section
-- `create-doc` 新增 `--if-exists error|skip|replace`，路径冲突行为变成显式策略
-- `delete-doc` 新增显式删除入口，必须带 `--yes` 才会执行
-- 写入校验现在会同时比较原始导出和可编辑正文视图，减少误报
+Required:
 
-## 环境变量
-
-脚本现在不再在源码里内置默认 `base_url/token`。
-
-必须通过环境变量提供：
-
-- `SIYUAN_BASE_URL`
+- `SIYUAN_BASE_URL` or `SIYUAN_URL` or `SIYUAN_REMOTE_URL`
 - `SIYUAN_TOKEN`
 
-兼容别名：
-
-- `SIYUAN_URL`
-- `SIYUAN_REMOTE_URL`
-
-可选项：
+Optional:
 
 - `SIYUAN_TIMEOUT`
 - `SIYUAN_ALLOWED_NOTEBOOKS`
 - `SIYUAN_LEARN_NOTEBOOKS`
 
-说明：
-
-- API 请求鉴权核心是 `SIYUAN_TOKEN`
-- `accessAuthCode` 更偏向思源服务启动/网络暴露配置，不是这个 CLI 每次请求要传的认证头
-- 所以 `SIYUAN_AUTH_CODE` 已从这个 skill 的运行配置里移除
-
-macOS / zsh 示例：
+### Example: macOS / Linux
 
 ```bash
 export SIYUAN_BASE_URL="http://your-siyuan-host:6806"
 export SIYUAN_TOKEN="your-siyuan-token"
+export SIYUAN_ALLOWED_NOTEBOOKS="Notes,Projects"
+export SIYUAN_LEARN_NOTEBOOKS="Notes"
 ```
 
-Windows / PowerShell 示例：
+### Example: PowerShell
 
 ```powershell
 $env:SIYUAN_BASE_URL = "http://your-siyuan-host:6806"
 $env:SIYUAN_TOKEN = "your-siyuan-token"
+$env:SIYUAN_ALLOWED_NOTEBOOKS = "Notes,Projects"
+$env:SIYUAN_LEARN_NOTEBOOKS = "Notes"
 ```
 
-## 范围约束
+## Scope behavior
 
-默认只允许处理：
+Notebook scope is **config-driven**, not hard-coded.
 
-- `服务器运维`
-- `learn`
+- If `SIYUAN_ALLOWED_NOTEBOOKS` is set, operations are restricted to that whitelist.
+- If `SIYUAN_ALLOWED_NOTEBOOKS` is empty, the CLI does not enforce a notebook whitelist.
+- `create-doc` can omit `--notebook` only when a default notebook can be resolved from:
+  - `SIYUAN_LEARN_NOTEBOOKS` with `--purpose learn`
+  - or the first value in `SIYUAN_ALLOWED_NOTEBOOKS`
+- Otherwise `create-doc` fails and requires `--notebook`.
 
-不默认：
+## Auth model
 
-- 扫描 `workspace` / `我的文档`
-- 跨目录全文检索
-- 写入其它 notebook
+This project uses token-based API auth.
 
-如确需处理其它 notebook，应先调整配置层，而不是在提示词里临时放开。
+Important:
 
-## 写入策略
+- request auth is driven by `SIYUAN_TOKEN`
+- `accessAuthCode` is mainly related to Siyuan service exposure / startup config
+- it is **not** the header this CLI uses for normal API requests
 
-所有写入类命令都遵循统一流程：
+## Write strategy
 
-1. 读取输入 Markdown（优先 `--input-file`）
-2. 统一换行为 `\n`
-3. 清理非法控制字符
-4. 调用思源写入接口
-5. 回读 `exportMdContent`
-6. 输出结构化 JSON
+All write flows follow the same pattern:
 
-## 维护建议
+1. load Markdown (`--input-file` preferred for long content)
+2. normalize line endings to `\n`
+3. strip invalid control characters
+4. call the corresponding Siyuan API
+5. read back the document
+6. verify the result
+7. return structured JSON
 
-- `SKILL.md` 负责调用策略，不负责协议细节。
-- `references/api-contract.md` 负责记录 CLI 输入输出契约。
-- 如后续要同步到另一台 mac 主机，必须整目录同步，不要只同步 `SKILL.md`。
-- 本次改造仅修改源头 skill；是否同步到 app 派生副本，由用户后续自行决定。
+## Notes for maintainers
+
+- keep `SKILL.md` focused on usage strategy
+- keep `references/api-contract.md` focused on CLI contract details
+- keep `scripts/` as the stable execution layer
+- if you redistribute the skill, copy the whole directory rather than `SKILL.md` alone

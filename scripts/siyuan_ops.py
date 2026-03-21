@@ -93,22 +93,35 @@ def find_notebook_by_name(client: SiyuanClient, notebook_name: str) -> Dict[str,
 
 
 def ensure_allowed_notebook(config: SiyuanConfig, notebook_name: str) -> str:
-    if notebook_name not in config.allowed_notebook_names:
+    target_name = ensure_not_empty(notebook_name, field_name="notebook name", action="scope-check")
+    if not config.allowed_notebook_names:
+        return target_name
+    if target_name not in config.allowed_notebook_names:
         raise SiyuanError(
-            f"Notebook '{notebook_name}' is outside the default allowed scope.",
+            f"Notebook '{target_name}' is outside the configured allowed scope.",
             action="scope-check",
             details={
-                "requested": notebook_name,
+                "requested": target_name,
                 "allowed": config.allowed_notebook_names,
             },
         )
-    return notebook_name
+    return target_name
 
 
 def choose_default_notebook(config: SiyuanConfig, *, purpose: str) -> str:
     if purpose == "learn" and config.learn_notebook_names:
         return config.learn_notebook_names[0]
-    return config.allowed_notebook_names[0]
+    if config.allowed_notebook_names:
+        return config.allowed_notebook_names[0]
+    raise SiyuanError(
+        "No default notebook configured. Pass --notebook explicitly or set SIYUAN_ALLOWED_NOTEBOOKS / SIYUAN_LEARN_NOTEBOOKS.",
+        action="scope-check",
+        details={
+            "purpose": purpose,
+            "allowed_notebooks": config.allowed_notebook_names,
+            "learn_notebooks": config.learn_notebook_names,
+        },
+    )
 
 
 def get_allowed_notebook_ids(client: SiyuanClient, config: SiyuanConfig) -> Dict[str, str]:
@@ -117,17 +130,21 @@ def get_allowed_notebook_ids(client: SiyuanClient, config: SiyuanConfig) -> Dict
     for notebook in notebooks:
         name = notebook.get("name")
         notebook_id = notebook.get("id")
-        if name in config.allowed_notebook_names and notebook_id:
+        if not notebook_id:
+            continue
+        if not config.allowed_notebook_names or name in config.allowed_notebook_names:
             result[str(notebook_id)] = str(name)
     return result
 
 
 def ensure_doc_meta_in_allowed_scope(client: SiyuanClient, config: SiyuanConfig, doc_meta: Dict[str, Any]) -> Dict[str, Any]:
+    if not config.allowed_notebook_names:
+        return doc_meta
     allowed_ids = get_allowed_notebook_ids(client, config)
     box = str(doc_meta.get("box") or "")
     if box not in allowed_ids:
         raise SiyuanError(
-            "Document is outside the default allowed scope.",
+            "Document is outside the configured allowed scope.",
             action="scope-check",
             details={
                 "doc_id": doc_meta.get("id"),
@@ -357,13 +374,16 @@ def search_docs(
     notebook_names: Sequence[str]
     if notebook_name:
         notebook_names = [ensure_allowed_notebook(config, notebook_name)]
-    else:
+        notebook_rows = [find_notebook_by_name(client, notebook_names[0])]
+    elif config.allowed_notebook_names:
         notebook_names = config.allowed_notebook_names
+        notebook_rows = [find_notebook_by_name(client, name) for name in notebook_names]
+    else:
+        notebook_rows = list_notebooks(client)
+        notebook_names = [str(item.get("name") or "") for item in notebook_rows if item.get("name")]
 
-    notebook_rows = []
-    for name in notebook_names:
-        notebook = find_notebook_by_name(client, name)
-        notebook_rows.append(notebook)
+    if not notebook_rows:
+        return []
 
     box_clause = ", ".join(f"'{escape_sql_literal(item['id'])}'" for item in notebook_rows)
     escaped_query = escape_sql_literal(safe_query)
