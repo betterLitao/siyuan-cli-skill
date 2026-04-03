@@ -66,12 +66,14 @@ Typical fields in `data`:
 - `sources`
 - `environment_layers`
 - `missing_required`
+- `advisories`
 - `deprecated`
 
 Notes:
 
 - `config --doctor` can succeed even when required config is missing
 - plain `config` fails fast if required connection values are missing
+- on Windows, `advisories` can explain that a value exists in `user` or `machine` env but the current process did not inherit it yet
 
 ## `read`
 

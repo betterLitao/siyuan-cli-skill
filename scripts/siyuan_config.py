@@ -262,6 +262,60 @@ def _mask_value(name: str, value: str) -> Optional[str]:
     return value
 
 
+def _build_windows_env_advisories(
+    *,
+    env_layers: Dict[str, Dict[str, Optional[str]]],
+    missing_required: List[str],
+) -> List[Dict[str, Any]]:
+    if os.name != "nt":
+        return []
+
+    process_layer = env_layers.get("process", {})
+    advisories: List[Dict[str, Any]] = []
+    checks = [
+        ("base_url", BASE_URL_ENV_KEYS),
+        ("token", TOKEN_ENV_KEYS),
+    ]
+
+    for field_name, env_keys in checks:
+        if field_name not in missing_required:
+            continue
+        if any(process_layer.get(env_key) for env_key in env_keys):
+            continue
+
+        found_layers: List[str] = []
+        found_keys: List[str] = []
+        for layer_name in ("user", "machine"):
+            layer = env_layers.get(layer_name, {})
+            matched_keys = [env_key for env_key in env_keys if layer.get(env_key)]
+            if matched_keys:
+                found_layers.append(layer_name)
+                found_keys.extend(matched_keys)
+
+        if not found_keys:
+            continue
+
+        keys_text = ", ".join(found_keys)
+        layers_text = " and ".join(found_layers)
+        advisories.append(
+            {
+                "code": "windows-env-not-inherited",
+                "level": "warning",
+                "field": field_name,
+                "env_keys": found_keys,
+                "layers": found_layers,
+                "message": (
+                    f"Found {keys_text} in the Windows {layers_text} environment, "
+                    "but the current process did not inherit it. Restart the current shell "
+                    "or host app to pick up updated environment variables, or move the value "
+                    "into the config file."
+                ),
+            }
+        )
+
+    return advisories
+
+
 def inspect_config(env: Dict[str, str] | None = None) -> Dict[str, Any]:
     resolved = _resolve_config_values(env)
     env_source = env or os.environ
@@ -297,6 +351,10 @@ def inspect_config(env: Dict[str, str] | None = None) -> Dict[str, Any]:
             for name in env_layers["process"]
         }
 
+    advisories = _build_windows_env_advisories(
+        env_layers=env_layers,
+        missing_required=resolved["missing_required"],
+    )
     doctor = {
         "scope_mode": resolved["scope_mode"],
         "allowed_notebooks": resolved["allowed_notebooks"],
@@ -310,6 +368,7 @@ def inspect_config(env: Dict[str, str] | None = None) -> Dict[str, Any]:
         "sources": resolved["sources"],
         "environment_layers": env_layers,
         "missing_required": resolved["missing_required"],
+        "advisories": advisories,
         "deprecated": {
             "legacy_learn_notebooks_env": bool(resolved["sources"]["legacy_learn_notebooks"]),
         },

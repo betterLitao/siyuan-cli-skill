@@ -79,7 +79,13 @@ Doctor mode is the first thing to run when config seems to disappear. It shows:
 - config file path and parse errors
 - which source won for each value
 - missing required values
+- advisories when Windows global env exists but the current process did not inherit it
 - Windows process, user, and machine environment layers
+
+Important:
+
+- On Windows, values shown only in `user` or `machine` layers are not active until a new shell or host app inherits them.
+- Syncing the skill files across devices does not sync runtime config into the current process. Each machine still needs its own env or config file path.
 
 ## Config model
 

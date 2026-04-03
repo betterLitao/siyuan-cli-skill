@@ -259,9 +259,15 @@ Doctor mode reports:
 - config file path and parse errors
 - exact source of each resolved value
 - missing required values
+- advisories when Windows global env exists but the current process did not inherit it
 - Windows process, user, and machine environment layers
 
 That makes it obvious whether a value exists only as a global environment variable, only in the current shell, or nowhere at all.
+
+Important:
+
+- On Windows, a value shown only in the `user` or `machine` layer is not active until a new shell or host app inherits it.
+- Syncing the skill files across devices does not inject runtime config into the current process. Each machine still needs its own env or config file path.
 
 ## Path handling notes
 

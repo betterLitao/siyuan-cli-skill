@@ -7,11 +7,12 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from siyuan_config import config_summary, load_config
+from siyuan_config import config_summary, inspect_config, load_config
 
 
 class SiyuanConfigTest(unittest.TestCase):
@@ -62,6 +63,47 @@ class SiyuanConfigTest(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertIn("doctor", payload["data"])
         self.assertEqual(payload["data"]["doctor"]["scope_mode"], "restricted")
+        self.assertEqual(payload["data"]["doctor"]["advisories"], [])
+
+    def test_doctor_warns_when_windows_global_env_is_not_inherited(self) -> None:
+        windows_env = {
+            ("HKEY_CURRENT_USER\\Environment", "SIYUAN_BASE_URL"): "http://example.com:6806",
+            ("HKEY_CURRENT_USER\\Environment", "SIYUAN_TOKEN"): "token-value",
+        }
+
+        with (
+            patch("siyuan_config.os.name", "nt"),
+            patch(
+                "siyuan_config._get_windows_env_value",
+                side_effect=lambda root, value_name: windows_env.get((root, value_name), ""),
+            ),
+        ):
+            inspection = inspect_config({})
+
+        doctor = inspection["doctor"]
+
+        self.assertEqual(doctor["missing_required"], ["base_url", "token"])
+        self.assertEqual(
+            doctor["advisories"],
+            [
+                {
+                    "code": "windows-env-not-inherited",
+                    "level": "warning",
+                    "field": "base_url",
+                    "env_keys": ["SIYUAN_BASE_URL"],
+                    "layers": ["user"],
+                    "message": "Found SIYUAN_BASE_URL in the Windows user environment, but the current process did not inherit it. Restart the current shell or host app to pick up updated environment variables, or move the value into the config file.",
+                },
+                {
+                    "code": "windows-env-not-inherited",
+                    "level": "warning",
+                    "field": "token",
+                    "env_keys": ["SIYUAN_TOKEN"],
+                    "layers": ["user"],
+                    "message": "Found SIYUAN_TOKEN in the Windows user environment, but the current process did not inherit it. Restart the current shell or host app to pick up updated environment variables, or move the value into the config file.",
+                },
+            ],
+        )
 
     def test_supports_generic_purpose_notebook_mapping(self) -> None:
         config = load_config(
