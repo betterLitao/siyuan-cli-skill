@@ -42,6 +42,53 @@ def extract_editable_markdown(content: str) -> str:
     return without_title.lstrip("\n")
 
 
+def split_document_prefix_and_body(
+    content: str,
+    *,
+    editable_content: Optional[str] = None,
+) -> Tuple[str, str]:
+    normalized_content = normalize_markdown(content)
+    normalized_body = normalize_markdown(
+        editable_content if editable_content is not None else extract_editable_markdown(normalized_content)
+    )
+    if normalized_body and normalized_content.endswith(normalized_body):
+        return normalized_content[: -len(normalized_body)], normalized_body
+
+    cursor = 0
+    frontmatter_match = re.match(r"^---\n.*?\n---(?:\n+|$)", normalized_content, flags=re.DOTALL)
+    if frontmatter_match:
+        cursor = frontmatter_match.end()
+
+    title_match = re.match(r"^# .*\n+", normalized_content[cursor:])
+    if title_match:
+        cursor += title_match.end()
+
+    while cursor < len(normalized_content) and normalized_content[cursor] == "\n":
+        cursor += 1
+
+    return normalized_content[:cursor], normalized_content[cursor:]
+
+
+def compose_document_from_editable(
+    original_content: str,
+    editable_content: str,
+    *,
+    current_editable_content: Optional[str] = None,
+) -> str:
+    prefix, _ = split_document_prefix_and_body(
+        original_content,
+        editable_content=current_editable_content,
+    )
+    normalized_body = normalize_markdown(editable_content).strip("\n")
+    if not prefix:
+        if not normalized_body:
+            return ""
+        return normalized_body + "\n"
+    if not normalized_body:
+        return prefix
+    return prefix + normalized_body + "\n"
+
+
 def load_markdown_text(input_text: Optional[str] = None, input_file: Optional[str] = None) -> str:
     if input_file:
         try:
@@ -109,17 +156,22 @@ def ensure_allowed_notebook(config: SiyuanConfig, notebook_name: str) -> str:
 
 
 def choose_default_notebook(config: SiyuanConfig, *, purpose: str) -> str:
-    if purpose == "learn" and config.learn_notebook_names:
-        return config.learn_notebook_names[0]
+    normalized_purpose = ensure_not_empty(purpose or "default", field_name="purpose", action="scope-check").lower()
+    purpose_notebook = config.purpose_notebook_names.get(normalized_purpose)
+    if purpose_notebook:
+        return purpose_notebook
+    if config.default_notebook_name:
+        return config.default_notebook_name
     if config.allowed_notebook_names:
         return config.allowed_notebook_names[0]
     raise SiyuanError(
-        "No default notebook configured. Pass --notebook explicitly or set SIYUAN_ALLOWED_NOTEBOOKS / SIYUAN_LEARN_NOTEBOOKS.",
+        "No default notebook configured. Pass --notebook explicitly or set SIYUAN_DEFAULT_NOTEBOOK / SIYUAN_PURPOSE_NOTEBOOKS / SIYUAN_ALLOWED_NOTEBOOKS.",
         action="scope-check",
         details={
-            "purpose": purpose,
+            "purpose": normalized_purpose,
             "allowed_notebooks": config.allowed_notebook_names,
-            "learn_notebooks": config.learn_notebook_names,
+            "default_notebook": config.default_notebook_name,
+            "purpose_notebooks": config.purpose_notebook_names,
         },
     )
 
@@ -567,10 +619,15 @@ def append_doc(client: SiyuanClient, *, doc_id: str, markdown: str, separator: s
     normalized_append = normalize_markdown(markdown).strip("\n")
     existing_body = current.get("editable_content") or extract_editable_markdown(current.get("content", ""))
     if existing_body.rstrip("\n"):
-        new_content = existing_body.rstrip("\n") + separator + normalized_append + "\n"
+        updated_body = existing_body.rstrip("\n") + separator + normalized_append + "\n"
     else:
-        new_content = normalized_append + "\n"
-    result = update_doc(client, doc_id=doc_id, markdown=new_content)
+        updated_body = normalized_append + "\n"
+    updated_content = compose_document_from_editable(
+        current.get("content", ""),
+        updated_body,
+        current_editable_content=existing_body,
+    )
+    result = update_doc(client, doc_id=doc_id, markdown=updated_content)
     result["appended_markdown"] = normalized_append
     return result
 
@@ -582,10 +639,6 @@ def verify_write(*, expected: str, actual: str) -> Tuple[bool, Optional[str]]:
     if normalized_expected == normalized_actual:
         return True, None
     if normalized_expected == normalized_actual_editable:
-        return True, None
-    if normalized_expected in normalized_actual:
-        return True, None
-    if normalized_expected in normalized_actual_editable:
         return True, None
     return False, "Read-back content does not match expected markdown."
 
@@ -755,18 +808,30 @@ def replace_doc_section(
         level=level,
         create_if_missing=create_if_missing,
     )
+    updated_full = compose_document_from_editable(
+        current.get("content", ""),
+        updated_body,
+        current_editable_content=current_body,
+    )
     target_level, target_heading = parse_heading_selector(heading, level)
     doc_blocks = get_child_blocks(client, doc_id)
     heading_block = find_heading_block(doc_blocks, heading=target_heading, level=target_level)
     normalized_body_markdown = normalize_markdown(markdown).strip("\n")
 
     if heading_block is None:
-        if not create_if_missing:
-            raise SiyuanError(
-                f"Section not found: {'#' * target_level} {target_heading}",
-                action="section",
-                details={"heading": target_heading, "level": target_level},
-            )
+        if not created:
+            result = update_doc(client, doc_id=doc_id, markdown=updated_full)
+            result["mode"] = "document"
+            result["section"] = {
+                "heading": target_heading,
+                "level": target_level,
+                "created": False,
+                "heading_block_id": None,
+                "replaced_child_count": 0,
+                "inserted_markdown": normalized_body_markdown,
+                "fallback_reason": "heading-block-not-found",
+            }
+            return result
         new_section_markdown = render_section(heading=target_heading, level=target_level, markdown=markdown)
         if doc_blocks:
             insert_result = insert_block(
@@ -778,7 +843,7 @@ def replace_doc_section(
             insert_result = insert_block(client, markdown=new_section_markdown, parent_id=doc_id)
         inserted_heading_id = extract_first_inserted_block_id(insert_result)
         after = read_doc(client, doc_id)
-        verified, mismatch_reason = verify_write(expected=updated_body, actual=after.get("content", ""))
+        verified, mismatch_reason = verify_write(expected=updated_full, actual=after.get("content", ""))
         return {
             "id": doc_id,
             "before": current,
@@ -808,7 +873,7 @@ def replace_doc_section(
         delete_block(client, block_id)
 
     after = read_doc(client, doc_id)
-    verified, mismatch_reason = verify_write(expected=updated_body, actual=after.get("content", ""))
+    verified, mismatch_reason = verify_write(expected=updated_full, actual=after.get("content", ""))
     result = {
         "id": doc_id,
         "before": current,

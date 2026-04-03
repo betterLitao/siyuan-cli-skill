@@ -6,7 +6,7 @@ import sys
 from typing import Any, Dict, Optional
 
 from siyuan_client import SiyuanClient, SiyuanError
-from siyuan_config import config_summary, load_config
+from siyuan_config import config_summary, inspect_config, load_config
 from siyuan_ops import (
     append_doc,
     choose_default_notebook,
@@ -44,6 +44,12 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     config_parser = subparsers.add_parser("config", help="Show effective connection and scope config")
+    config_parser.add_argument(
+        "--doctor",
+        action="store_true",
+        default=False,
+        help="Include config-source diagnostics and missing-value hints",
+    )
     config_parser.set_defaults(handler=handle_config)
 
     read_parser = subparsers.add_parser("read", help="Read a document as Markdown")
@@ -94,9 +100,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     create_parser.add_argument(
         "--purpose",
-        choices=["default", "learn"],
         default="default",
-        help="Choose which default notebook slot to use when --notebook is omitted",
+        help="Purpose key used to resolve the default notebook when --notebook is omitted",
     )
     create_parser.set_defaults(handler=handle_create_doc)
 
@@ -132,12 +137,46 @@ def add_section_args(parser: argparse.ArgumentParser) -> None:
 
 
 def handle_config(args: argparse.Namespace) -> Dict[str, Any]:
-    config = load_config()
+    inspection = inspect_config()
+    config = inspection["config"]
+    if config is None and not args.doctor:
+        load_config()
+    doctor = inspection["doctor"] if args.doctor else None
+    data = (
+        config_summary(config, doctor=doctor)
+        if config is not None
+        else {
+            "base_url": None,
+            "timeout": None,
+            "allowed_notebooks": inspection["doctor"]["allowed_notebooks"],
+            "scope_mode": inspection["doctor"]["scope_mode"],
+            "default_notebook": inspection["doctor"]["default_notebook"],
+            "purpose_notebooks": inspection["doctor"]["purpose_notebooks"],
+            "has_token": False,
+            "config_file_path": inspection["doctor"]["config_file"]["path"],
+            "server_base_url_hint": None,
+            "required_env": {
+                "base_url": ["SIYUAN_BASE_URL", "SIYUAN_URL", "SIYUAN_REMOTE_URL"],
+                "token": ["SIYUAN_TOKEN"],
+            },
+            "optional_env": {
+                "timeout": ["SIYUAN_TIMEOUT"],
+                "allowed_notebooks": ["SIYUAN_ALLOWED_NOTEBOOKS"],
+                "default_notebook": ["SIYUAN_DEFAULT_NOTEBOOK"],
+                "purpose_notebooks": ["SIYUAN_PURPOSE_NOTEBOOKS"],
+                "config_file": ["SIYUAN_CONFIG_FILE"],
+            },
+            "deprecated_env": {
+                "learn_notebooks": ["SIYUAN_LEARN_NOTEBOOKS"],
+            },
+            **({"doctor": inspection["doctor"]} if args.doctor else {}),
+        }
+    )
     return {
         "ok": True,
         "action": "config",
         "message": "Loaded Siyuan configuration.",
-        "data": config_summary(config),
+        "data": data,
         "error": None,
     }
 

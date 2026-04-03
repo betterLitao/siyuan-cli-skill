@@ -28,10 +28,10 @@
   <text x="416" y="454" fill="#C9D1D9" font-size="24" font-family="SFMono-Regular, Menlo, Consolas, monospace">: [</text>
   <text x="450" y="454" fill="#A5D6FF" font-size="24" font-family="SFMono-Regular, Menlo, Consolas, monospace">"Notes", "Projects"</text>
   <text x="720" y="454" fill="#C9D1D9" font-size="24" font-family="SFMono-Regular, Menlo, Consolas, monospace">],</text>
-  <text x="142" y="498" fill="#79C0FF" font-size="24" font-family="SFMono-Regular, Menlo, Consolas, monospace">"learn_notebooks"</text>
-  <text x="398" y="498" fill="#C9D1D9" font-size="24" font-family="SFMono-Regular, Menlo, Consolas, monospace">: [</text>
-  <text x="432" y="498" fill="#A5D6FF" font-size="24" font-family="SFMono-Regular, Menlo, Consolas, monospace">"Notes"</text>
-  <text x="530" y="498" fill="#C9D1D9" font-size="24" font-family="SFMono-Regular, Menlo, Consolas, monospace">],</text>
+  <text x="142" y="498" fill="#79C0FF" font-size="24" font-family="SFMono-Regular, Menlo, Consolas, monospace">"default_notebook"</text>
+  <text x="434" y="498" fill="#C9D1D9" font-size="24" font-family="SFMono-Regular, Menlo, Consolas, monospace">: </text>
+  <text x="466" y="498" fill="#A5D6FF" font-size="24" font-family="SFMono-Regular, Menlo, Consolas, monospace">"Projects"</text>
+  <text x="606" y="498" fill="#C9D1D9" font-size="24" font-family="SFMono-Regular, Menlo, Consolas, monospace">,</text>
   <text x="142" y="542" fill="#79C0FF" font-size="24" font-family="SFMono-Regular, Menlo, Consolas, monospace">"has_token"</text>
   <text x="302" y="542" fill="#C9D1D9" font-size="24" font-family="SFMono-Regular, Menlo, Consolas, monospace">: true</text>
   <text x="110" y="586" fill="#C9D1D9" font-size="24" font-family="SFMono-Regular, Menlo, Consolas, monospace">},</text>

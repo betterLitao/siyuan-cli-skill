@@ -23,6 +23,9 @@ jobs:
       - name: Compile Python scripts
         run: python -m compileall scripts
 
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
+
       - name: Scan for sensitive strings
         shell: bash
         run: |

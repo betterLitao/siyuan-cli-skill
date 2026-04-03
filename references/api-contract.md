@@ -45,11 +45,33 @@ Typical fields in `data`:
 - `base_url`
 - `timeout`
 - `allowed_notebooks`
-- `learn_notebooks`
-- `scope_mode` (`restricted` or `unrestricted`)
+- `scope_mode`
+- `default_notebook`
+- `purpose_notebooks`
 - `has_token`
+- `config_file_path`
+- `server_base_url_hint`
 - `required_env`
 - `optional_env`
+- `deprecated_env`
+- `doctor` when `--doctor` is used
+
+`doctor` fields:
+
+- `scope_mode`
+- `allowed_notebooks`
+- `default_notebook`
+- `purpose_notebooks`
+- `config_file`
+- `sources`
+- `environment_layers`
+- `missing_required`
+- `deprecated`
+
+Notes:
+
+- `config --doctor` can succeed even when required config is missing
+- plain `config` fails fast if required connection values are missing
 
 ## `read`
 
@@ -131,7 +153,7 @@ Input:
 Behavior:
 
 1. read current content
-2. replace the whole document body
+2. replace the whole document
 3. read back and verify
 
 `data` fields:
@@ -153,8 +175,9 @@ Input:
 Behavior:
 
 1. read current content
-2. append content by rewriting the document body
-3. read back and verify
+2. append content to the editable body
+3. rebuild the full document while preserving frontmatter and top-level title
+4. read back and verify
 
 `data` fields:
 
@@ -177,10 +200,11 @@ Input:
 
 Behavior:
 
-1. read the document body view
+1. read the editable document body
 2. find the target heading
-3. keep the heading block and replace only its child blocks
-4. read back and verify
+3. prefer block-level replacement under the existing heading block
+4. if the markdown section exists but block matching fails, fall back to a document-level rewrite
+5. read back and verify
 
 `data` fields:
 
@@ -193,6 +217,11 @@ Behavior:
 - `section`
 - `meta`
 
+Mode values:
+
+- `block`: block edit path succeeded
+- `document`: fallback document rewrite path was used
+
 ## `upsert-section`
 
 Input:
@@ -201,7 +230,7 @@ Input:
 
 Behavior:
 
-1. read the document body view
+1. read the editable document body
 2. replace the section if the heading exists
 3. otherwise create a new section at the end
 4. read back and verify
@@ -218,7 +247,7 @@ Input:
 - `--text <markdown>` or `--input-file <file>`
 - `--notebook <name>` optional
 - `--if-exists error|skip|replace` optional
-- `--purpose learn|default` optional
+- `--purpose <key>` optional
 
 Behavior:
 
@@ -244,10 +273,15 @@ Behavior:
 
 Default notebook resolution:
 
-- if `--notebook` is present, that value is used
-- if `--purpose learn` and `SIYUAN_LEARN_NOTEBOOKS` is configured, the first learn notebook is used
-- otherwise the first entry in `SIYUAN_ALLOWED_NOTEBOOKS` is used
-- if none of the above are available, the command fails and requires `--notebook`
+1. if `--notebook` is present, that value is used
+2. else if `purpose_notebooks[--purpose]` exists, that value is used
+3. else if `default_notebook` exists, that value is used
+4. else if `allowed_notebooks` is not empty, the first value is used
+5. otherwise the command fails and requires `--notebook`
+
+Compatibility rule:
+
+- if `SIYUAN_LEARN_NOTEBOOKS` is configured and `purpose_notebooks.learn` is missing, the first legacy learn notebook is used for `--purpose learn`
 
 ## `delete-doc`
 
@@ -261,7 +295,7 @@ Behavior:
 1. resolve target document
 2. preserve the pre-delete content in the result
 3. call official `removeDoc`
-4. verify that the document ID / hpath is gone
+4. verify that the document ID and hpath are gone
 
 `data` fields:
 
@@ -276,6 +310,15 @@ Behavior:
 - `remaining_doc_ids`
 - `meta`
 
+## Verification rules
+
+Write verification only succeeds on:
+
+- exact full-document match, or
+- exact editable-body match
+
+Substring-only matches are rejected.
+
 ## Scope rules
 
 The CLI supports two modes:
@@ -284,7 +327,7 @@ The CLI supports two modes:
 
 When `SIYUAN_ALLOWED_NOTEBOOKS` is set:
 
-- read/write/search operations are restricted to that whitelist
+- read, search, and write operations are restricted to that whitelist
 - passing a notebook outside the whitelist raises a scope error
 
 ### Unrestricted mode
